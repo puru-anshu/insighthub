@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Lock,
   Mail,
+  Layers,
   Settings,
   Shield,
   Users,
@@ -24,8 +25,9 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
   { label: 'Reports', href: '/reports', icon: BarChart3 },
-  { label: 'Datasources', href: '/datasources', icon: Database },
   { label: 'Report Groups', href: '/report-groups', icon: FolderOpen },
+  { label: 'Dashboards', href: '/dashboards', icon: Layers },
+  { label: 'Datasources', href: '/datasources', icon: Database },
   { label: 'Users', href: '/users', icon: Users },
   { label: 'Roles', href: '/roles', icon: Shield },
   { label: 'Schedules', href: '/schedules', icon: Calendar },

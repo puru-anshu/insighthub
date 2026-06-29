@@ -34,6 +34,16 @@ const ReportsPageWrapper = lazy(() =>
 const JobsPageWrapper = lazy(() =>
   import('@/features/jobs').then((m) => ({ default: m.JobsPage })),
 );
+const DashboardsPageWrapper = lazy(() =>
+  import('@/features/dashboards').then((m) => ({
+    default: m.DashboardsPage,
+  })),
+);
+const DashboardViewPageWrapper = lazy(() =>
+  import('@/features/dashboards').then((m) => ({
+    default: m.DashboardViewPage,
+  })),
+);
 
 function LazyPage({ children }: { children: React.ReactNode }) {
   return (
@@ -110,6 +120,22 @@ export function AppRouter() {
           element={
             <LazyPage>
               <JobsPageWrapper />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="dashboards"
+          element={
+            <LazyPage>
+              <DashboardsPageWrapper />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="dashboards/:id"
+          element={
+            <LazyPage>
+              <DashboardViewPageWrapper />
             </LazyPage>
           }
         />
