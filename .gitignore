@@ -1,0 +1,18 @@
+# ===== Global =====
+.DS_Store
+*.log
+
+# ===== Backend (Java/Maven) =====
+backend/target/
+backend/.idea/
+backend/*.iml
+
+# ===== Frontend (Node/pnpm) =====
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+frontend/coverage/
+frontend/*.tsbuildinfo
+frontend/.eslintcache
