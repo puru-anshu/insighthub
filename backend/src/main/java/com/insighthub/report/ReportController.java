@@ -51,7 +51,9 @@ public class ReportController {
     }
 
     @PostMapping("/{id}/run")
-    public ResponseEntity<RunReportResult> runReport(@PathVariable Long id) {
-        return ResponseEntity.ok(reportRunService.runReport(id));
+    public ResponseEntity<RunReportResult> runReport(
+            @PathVariable Long id,
+            @RequestBody(required = false) java.util.Map<String, String> params) {
+        return ResponseEntity.ok(reportRunService.runReport(id, params));
     }
 }

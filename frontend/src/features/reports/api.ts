@@ -68,7 +68,54 @@ export async function deleteReport(id: number): Promise<void> {
   await apiClient.delete(`/reports/${id}`);
 }
 
-export async function runReport(id: number): Promise<RunReportResult> {
-  const { data } = await apiClient.post(`/reports/${id}/run`);
+export async function runReport(
+  id: number,
+  params?: Record<string, string>,
+): Promise<RunReportResult> {
+  const { data } = await apiClient.post(`/reports/${id}/run`, params || {});
   return data;
+}
+
+// === Parameters ===
+
+export interface Parameter {
+  id: number;
+  reportId: number;
+  name: string;
+  label?: string;
+  paramType: string;
+  defaultValue?: string;
+  placeholder?: string;
+  required: boolean;
+  position: number;
+}
+
+export async function fetchReportParameters(
+  reportId: number,
+): Promise<Parameter[]> {
+  const { data } = await apiClient.get(`/reports/${reportId}/parameters`);
+  return data;
+}
+
+export async function createParameter(
+  reportId: number,
+  payload: Omit<Parameter, 'id' | 'reportId'>,
+): Promise<Parameter> {
+  const { data } = await apiClient.post(
+    `/reports/${reportId}/parameters`,
+    payload,
+  );
+  return data;
+}
+
+export async function updateParameter(
+  id: number,
+  payload: Omit<Parameter, 'id' | 'reportId'>,
+): Promise<Parameter> {
+  const { data } = await apiClient.put(`/parameters/${id}`, payload);
+  return data;
+}
+
+export async function deleteParameter(id: number): Promise<void> {
+  await apiClient.delete(`/parameters/${id}`);
 }

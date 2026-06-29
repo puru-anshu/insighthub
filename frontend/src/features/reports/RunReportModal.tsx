@@ -1,9 +1,16 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Play, X } from 'lucide-react';
+import { useState } from 'react';
 
 import { LoadingSpinner } from '@/components/ui';
 
-import { runReport, type Report, type RunReportResult } from './api';
+import {
+  fetchReportParameters,
+  runReport,
+  type Parameter,
+  type Report,
+  type RunReportResult,
+} from './api';
 
 interface Props {
   report: Report;
@@ -11,11 +18,31 @@ interface Props {
 }
 
 export function RunReportModal({ report, onClose }: Props) {
+  const [paramValues, setParamValues] = useState<Record<string, string>>({});
+
+  const { data: parameters } = useQuery({
+    queryKey: ['report-parameters', report.id],
+    queryFn: () => fetchReportParameters(report.id),
+  });
+
+  // Initialize defaults when params load
+  if (parameters && Object.keys(paramValues).length === 0) {
+    const defaults: Record<string, string> = {};
+    parameters.forEach((p) => {
+      if (p.defaultValue) defaults[p.name] = p.defaultValue;
+    });
+    if (Object.keys(defaults).length > 0) setParamValues(defaults);
+  }
+
   const mutation = useMutation({
-    mutationFn: () => runReport(report.id),
+    mutationFn: () => runReport(report.id, paramValues),
   });
 
   const result: RunReportResult | undefined = mutation.data;
+
+  const setParam = (name: string, value: string) => {
+    setParamValues((prev) => ({ ...prev, [name]: value }));
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -48,8 +75,27 @@ export function RunReportModal({ report, onClose }: Props) {
           </div>
         </div>
 
-        {/* Body */}
-        <div className="overflow-auto p-6" style={{ maxHeight: 'calc(90vh - 80px)' }}>
+        {/* Parameters */}
+        {parameters && parameters.length > 0 && (
+          <div className="border-b border-gray-200 bg-gray-50 px-6 py-3">
+            <div className="flex flex-wrap gap-4">
+              {parameters.map((param) => (
+                <ParameterInput
+                  key={param.id}
+                  param={param}
+                  value={paramValues[param.name] ?? ''}
+                  onChange={(val) => setParam(param.name, val)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Results */}
+        <div
+          className="overflow-auto p-6"
+          style={{ maxHeight: 'calc(90vh - 160px)' }}
+        >
           {mutation.isPending && (
             <LoadingSpinner size="lg" className="py-12" />
           )}
@@ -63,7 +109,7 @@ export function RunReportModal({ report, onClose }: Props) {
           {result && (
             <div>
               <div className="mb-4 flex items-center gap-4 text-sm text-gray-500">
-                <span>{result.rowCount} rows returned</span>
+                <span>{result.rowCount} rows</span>
                 <span>•</span>
                 <span>{result.executionMs}ms</span>
               </div>
@@ -109,11 +155,81 @@ export function RunReportModal({ report, onClose }: Props) {
 
           {!mutation.isPending && !mutation.isError && !result && (
             <p className="py-12 text-center text-gray-400">
-              Click "Run" to execute this report.
+              {parameters && parameters.length > 0
+                ? 'Fill in parameters above and click "Run".'
+                : 'Click "Run" to execute this report.'}
             </p>
           )}
         </div>
       </div>
     </div>
   );
+}
+
+function ParameterInput({
+  param,
+  value,
+  onChange,
+}: {
+  param: Parameter;
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const label = param.label || param.name;
+
+  switch (param.paramType) {
+    case 'BOOLEAN':
+      return (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={value === 'true'}
+            onChange={(e) => onChange(e.target.checked ? 'true' : 'false')}
+            className="rounded border-gray-300 text-primary-600"
+          />
+          {label}
+        </label>
+      );
+    case 'NUMBER':
+      return (
+        <div className="min-w-[140px]">
+          <label className="text-xs font-medium text-gray-600">{label}</label>
+          <input
+            type="number"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={param.placeholder ?? ''}
+            className="input-field mt-1"
+          />
+        </div>
+      );
+    case 'DATE':
+      return (
+        <div className="min-w-[160px]">
+          <label className="text-xs font-medium text-gray-600">{label}</label>
+          <input
+            type="date"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="input-field mt-1"
+          />
+        </div>
+      );
+    default:
+      return (
+        <div className="min-w-[160px]">
+          <label className="text-xs font-medium text-gray-600">
+            {label}
+            {param.required && <span className="text-red-500"> *</span>}
+          </label>
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={param.placeholder ?? ''}
+            className="input-field mt-1"
+          />
+        </div>
+      );
+  }
 }

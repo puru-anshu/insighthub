@@ -23,7 +23,7 @@ public class ReportRunService {
     /**
      * Execute a report's SQL against its configured datasource and return tabular results.
      */
-    public RunReportResult runReport(Long reportId) {
+    public RunReportResult runReport(Long reportId, Map<String, String> params) {
         ReportEntity report = reportRepository.findById(reportId)
             .orElseThrow(() -> new ResourceNotFoundException("Report", "id", reportId));
 
@@ -35,8 +35,16 @@ public class ReportRunService {
             throw new IllegalArgumentException("Report has no datasource assigned");
         }
 
+        // Substitute :paramName placeholders with values
+        String sql = report.getReportSource();
+        if (params != null) {
+            for (Map.Entry<String, String> entry : params.entrySet()) {
+                sql = sql.replace(":" + entry.getKey(), "'" + entry.getValue().replace("'", "''") + "'");
+            }
+        }
+
         DatasourceEntity ds = report.getDatasource();
-        return executeSql(ds, report.getReportSource());
+        return executeSql(ds, sql);
     }
 
     /**
