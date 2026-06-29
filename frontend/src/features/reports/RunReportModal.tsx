@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Play, X } from 'lucide-react';
+import { BarChart3, Play, Table2, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { LoadingSpinner } from '@/components/ui';
@@ -11,6 +11,7 @@ import {
   type Report,
   type RunReportResult,
 } from './api';
+import { ChartView, type ChartType } from './ChartView';
 
 interface Props {
   report: Report;
@@ -19,6 +20,8 @@ interface Props {
 
 export function RunReportModal({ report, onClose }: Props) {
   const [paramValues, setParamValues] = useState<Record<string, string>>({});
+  const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
+  const [chartType, setChartType] = useState<ChartType>('bar');
 
   const { data: parameters } = useQuery({
     queryKey: ['report-parameters', report.id],
@@ -108,16 +111,48 @@ export function RunReportModal({ report, onClose }: Props) {
 
           {result && (
             <div>
-              <div className="mb-4 flex items-center gap-4 text-sm text-gray-500">
-                <span>{result.rowCount} rows</span>
-                <span>•</span>
-                <span>{result.executionMs}ms</span>
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-4 text-sm text-gray-500">
+                  <span>{result.rowCount} rows</span>
+                  <span>•</span>
+                  <span>{result.executionMs}ms</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setViewMode('table')}
+                    className={`rounded p-1.5 ${viewMode === 'table' ? 'bg-primary-100 text-primary-700' : 'text-gray-400 hover:text-gray-600'}`}
+                    title="Table view"
+                  >
+                    <Table2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('chart')}
+                    className={`rounded p-1.5 ${viewMode === 'chart' ? 'bg-primary-100 text-primary-700' : 'text-gray-400 hover:text-gray-600'}`}
+                    title="Chart view"
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                  </button>
+                  {viewMode === 'chart' && (
+                    <select
+                      value={chartType}
+                      onChange={(e) => setChartType(e.target.value as ChartType)}
+                      className="rounded border border-gray-300 px-2 py-1 text-xs"
+                    >
+                      <option value="bar">Bar</option>
+                      <option value="line">Line</option>
+                      <option value="area">Area</option>
+                      <option value="pie">Pie</option>
+                    </select>
+                  )}
+                </div>
               </div>
 
               {result.rows.length === 0 ? (
                 <p className="py-8 text-center text-gray-500">
                   Query returned no data.
                 </p>
+              ) : viewMode === 'chart' ? (
+                <ChartView data={result} chartType={chartType} />
               ) : (
                 <div className="overflow-x-auto rounded-md border border-gray-200">
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
