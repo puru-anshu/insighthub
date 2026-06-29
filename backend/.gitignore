@@ -24,3 +24,6 @@ Thumbs.db
 # Build
 build/
 out/
+
+# H2 database files
+data/
