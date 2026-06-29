@@ -10,6 +10,7 @@ export interface User {
   active: boolean;
   publicUser: boolean;
   roles?: string[];
+  permissions?: string[];
   createdAt?: string;
   updatedAt?: string;
 }

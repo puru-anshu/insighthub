@@ -18,6 +18,7 @@ public class UserDto {
     private boolean active;
     private boolean publicUser;
     private Set<String> roles;
+    private Set<String> permissions;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

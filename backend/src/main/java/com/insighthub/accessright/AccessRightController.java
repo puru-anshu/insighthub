@@ -2,6 +2,7 @@ package com.insighthub.accessright;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.Set;
 @RestController
 @RequestMapping("/api/access-rights")
 @RequiredArgsConstructor
+@PreAuthorize("hasAuthority('configure_access_rights') or hasRole('ADMIN')")
 public class AccessRightController {
 
     private final AccessRightService accessRightService;

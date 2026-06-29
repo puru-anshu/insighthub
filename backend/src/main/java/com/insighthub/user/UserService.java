@@ -86,6 +86,11 @@ public class UserService {
             .map(RoleEntity::getName)
             .collect(Collectors.toSet());
 
+        Set<String> permissionNames = user.getRoles().stream()
+            .flatMap(role -> role.getPermissions().stream())
+            .map(perm -> perm.getName())
+            .collect(Collectors.toSet());
+
         return UserDto.builder()
             .id(user.getId())
             .username(user.getUsername())
@@ -96,6 +101,7 @@ public class UserService {
             .active(user.isActive())
             .publicUser(user.isPublicUser())
             .roles(roleNames)
+            .permissions(permissionNames)
             .createdAt(user.getCreatedAt())
             .updatedAt(user.getUpdatedAt())
             .build();
