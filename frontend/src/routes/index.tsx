@@ -9,7 +9,6 @@ import { LoginPage } from '@/features/auth';
 
 // Lazy-loaded pages for code splitting
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
-const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
 const JobsPage = lazy(() => import('@/pages/JobsPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
@@ -29,6 +28,9 @@ const ReportGroupsPageWrapper = lazy(() =>
   import('@/features/report-groups').then((m) => ({
     default: m.ReportGroupsPage,
   })),
+);
+const ReportsPageWrapper = lazy(() =>
+  import('@/features/reports').then((m) => ({ default: m.ReportsPage })),
 );
 
 function LazyPage({ children }: { children: React.ReactNode }) {
@@ -65,7 +67,7 @@ export function AppRouter() {
           path="reports"
           element={
             <LazyPage>
-              <ReportsPage />
+              <ReportsPageWrapper />
             </LazyPage>
           }
         />

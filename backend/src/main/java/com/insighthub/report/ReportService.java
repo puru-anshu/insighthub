@@ -1,6 +1,10 @@
 package com.insighthub.report;
 
 import com.insighthub.common.exception.ResourceNotFoundException;
+import com.insighthub.datasource.DatasourceEntity;
+import com.insighthub.datasource.DatasourceRepository;
+import com.insighthub.reportgroup.ReportGroupEntity;
+import com.insighthub.reportgroup.ReportGroupRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +17,8 @@ import java.util.List;
 public class ReportService {
 
     private final ReportRepository reportRepository;
+    private final ReportGroupRepository reportGroupRepository;
+    private final DatasourceRepository datasourceRepository;
 
     public List<ReportDto> getAllReports() {
         return reportRepository.findAll().stream()
@@ -22,8 +28,69 @@ public class ReportService {
 
     public ReportDto getReportById(Long id) {
         return reportRepository.findById(id)
-            .map(this::toDto)
+            .map(this::toDtoWithSource)
             .orElseThrow(() -> new ResourceNotFoundException("Report", "id", id));
+    }
+
+    @Transactional
+    public ReportDto createReport(CreateReportRequest request, String createdBy) {
+        ReportGroupEntity group = null;
+        if (request.getReportGroupId() != null) {
+            group = reportGroupRepository.findById(request.getReportGroupId())
+                .orElseThrow(() -> new ResourceNotFoundException("ReportGroup", "id", request.getReportGroupId()));
+        }
+
+        DatasourceEntity datasource = null;
+        if (request.getDatasourceId() != null) {
+            datasource = datasourceRepository.findById(request.getDatasourceId())
+                .orElseThrow(() -> new ResourceNotFoundException("Datasource", "id", request.getDatasourceId()));
+        }
+
+        ReportEntity entity = ReportEntity.builder()
+            .name(request.getName())
+            .shortDescription(request.getShortDescription())
+            .description(request.getDescription())
+            .reportType(request.getReportType())
+            .reportGroup(group)
+            .datasource(datasource)
+            .contactPerson(request.getContactPerson())
+            .active(request.isActive())
+            .reportSource(request.getReportSource())
+            .defaultReportFormat(request.getDefaultReportFormat())
+            .createdBy(createdBy)
+            .build();
+
+        return toDto(reportRepository.save(entity));
+    }
+
+    @Transactional
+    public ReportDto updateReport(Long id, CreateReportRequest request, String updatedBy) {
+        ReportEntity entity = reportRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Report", "id", id));
+
+        entity.setName(request.getName());
+        entity.setShortDescription(request.getShortDescription());
+        entity.setDescription(request.getDescription());
+        entity.setReportType(request.getReportType());
+        entity.setContactPerson(request.getContactPerson());
+        entity.setActive(request.isActive());
+        entity.setReportSource(request.getReportSource());
+        entity.setDefaultReportFormat(request.getDefaultReportFormat());
+        entity.setUpdatedBy(updatedBy);
+
+        if (request.getReportGroupId() != null) {
+            entity.setReportGroup(reportGroupRepository.findById(request.getReportGroupId()).orElse(null));
+        } else {
+            entity.setReportGroup(null);
+        }
+
+        if (request.getDatasourceId() != null) {
+            entity.setDatasource(datasourceRepository.findById(request.getDatasourceId()).orElse(null));
+        } else {
+            entity.setDatasource(null);
+        }
+
+        return toDto(reportRepository.save(entity));
     }
 
     @Transactional
@@ -52,5 +119,11 @@ public class ReportService {
             .createdAt(report.getCreatedAt())
             .updatedAt(report.getUpdatedAt())
             .build();
+    }
+
+    private ReportDto toDtoWithSource(ReportEntity report) {
+        ReportDto dto = toDto(report);
+        dto.setReportSource(report.getReportSource());
+        return dto;
     }
 }
