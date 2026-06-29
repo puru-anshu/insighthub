@@ -3,13 +3,15 @@ import {
   Calendar,
   Database,
   FolderOpen,
+  KeyRound,
   LayoutDashboard,
+  Layers,
   Lock,
   Mail,
-  Layers,
   Settings,
   Shield,
   Users,
+  Users2,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
@@ -29,7 +31,9 @@ const navItems: NavItem[] = [
   { label: 'Dashboards', href: '/dashboards', icon: Layers },
   { label: 'Datasources', href: '/datasources', icon: Database },
   { label: 'Users', href: '/users', icon: Users },
+  { label: 'User Groups', href: '/user-groups', icon: Users2 },
   { label: 'Roles', href: '/roles', icon: Shield },
+  { label: 'Access Rights', href: '/access-rights', icon: KeyRound },
   { label: 'Schedules', href: '/schedules', icon: Calendar },
   { label: 'Jobs', href: '/jobs', icon: Settings },
   { label: 'SMTP Servers', href: '/smtp-servers', icon: Mail },

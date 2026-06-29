@@ -44,6 +44,16 @@ const DashboardViewPageWrapper = lazy(() =>
     default: m.DashboardViewPage,
   })),
 );
+const UserGroupsPageWrapper = lazy(() =>
+  import('@/features/user-groups').then((m) => ({
+    default: m.UserGroupsPage,
+  })),
+);
+const AccessRightsPageWrapper = lazy(() =>
+  import('@/features/access-rights').then((m) => ({
+    default: m.AccessRightsPage,
+  })),
+);
 
 function LazyPage({ children }: { children: React.ReactNode }) {
   return (
@@ -136,6 +146,22 @@ export function AppRouter() {
           element={
             <LazyPage>
               <DashboardViewPageWrapper />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="user-groups"
+          element={
+            <LazyPage>
+              <UserGroupsPageWrapper />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="access-rights"
+          element={
+            <LazyPage>
+              <AccessRightsPageWrapper />
             </LazyPage>
           }
         />
