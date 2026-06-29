@@ -5,4 +5,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ReportGroupRepository extends JpaRepository<ReportGroupEntity, Long> {
+    boolean existsByName(String name);
 }

@@ -25,6 +25,11 @@ const DatasourcesPageWrapper = lazy(() =>
     default: m.DatasourcesPage,
   })),
 );
+const ReportGroupsPageWrapper = lazy(() =>
+  import('@/features/report-groups').then((m) => ({
+    default: m.ReportGroupsPage,
+  })),
+);
 
 function LazyPage({ children }: { children: React.ReactNode }) {
   return (
@@ -85,6 +90,14 @@ export function AppRouter() {
           element={
             <LazyPage>
               <DatasourcesPageWrapper />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="report-groups"
+          element={
+            <LazyPage>
+              <ReportGroupsPageWrapper />
             </LazyPage>
           }
         />

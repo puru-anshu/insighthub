@@ -13,4 +13,6 @@ public interface ReportRepository extends JpaRepository<ReportEntity, Long> {
     List<ReportEntity> findByReportGroupId(Long reportGroupId);
 
     boolean existsByName(String name);
+
+    long countByReportGroupId(Long reportGroupId);
 }
