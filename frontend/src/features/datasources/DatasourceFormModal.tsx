@@ -14,22 +14,18 @@ import {
 } from './api';
 
 const DATABASE_TYPES = [
-  { value: 'H2', label: 'H2', driver: 'org.h2.Driver' },
-  { value: 'PostgreSQL', label: 'PostgreSQL', driver: 'org.postgresql.Driver' },
-  { value: 'MySQL', label: 'MySQL', driver: 'com.mysql.cj.jdbc.Driver' },
-  {
-    value: 'Oracle',
-    label: 'Oracle',
-    driver: 'oracle.jdbc.OracleDriver',
-  },
-  {
-    value: 'SQL Server',
-    label: 'SQL Server',
-    driver: 'com.microsoft.sqlserver.jdbc.SQLServerDriver',
-  },
-  { value: 'MariaDB', label: 'MariaDB', driver: 'org.mariadb.jdbc.Driver' },
-  { value: 'SQLite', label: 'SQLite', driver: 'org.sqlite.JDBC' },
-  { value: 'DB2', label: 'DB2', driver: 'com.ibm.db2.jcc.DB2Driver' },
+  { value: 'H2', label: 'H2', driver: 'org.h2.Driver', sampleUrl: 'jdbc:h2:mem:testdb' },
+  { value: 'PostgreSQL', label: 'PostgreSQL', driver: 'org.postgresql.Driver', sampleUrl: 'jdbc:postgresql://localhost:5432/mydb' },
+  { value: 'MySQL', label: 'MySQL', driver: 'com.mysql.cj.jdbc.Driver', sampleUrl: 'jdbc:mysql://localhost:3306/mydb' },
+  { value: 'MariaDB', label: 'MariaDB', driver: 'org.mariadb.jdbc.Driver', sampleUrl: 'jdbc:mariadb://localhost:3306/mydb' },
+  { value: 'Oracle', label: 'Oracle', driver: 'oracle.jdbc.OracleDriver', sampleUrl: 'jdbc:oracle:thin:@localhost:1521:orcl' },
+  { value: 'SQL Server', label: 'SQL Server', driver: 'com.microsoft.sqlserver.jdbc.SQLServerDriver', sampleUrl: 'jdbc:sqlserver://localhost:1433;databaseName=mydb' },
+  { value: 'DB2', label: 'IBM DB2', driver: 'com.ibm.db2.jcc.DB2Driver', sampleUrl: 'jdbc:db2://localhost:50000/mydb' },
+  { value: 'SQLite', label: 'SQLite', driver: 'org.sqlite.JDBC', sampleUrl: 'jdbc:sqlite:/path/to/database.db' },
+  { value: 'HSQLDB', label: 'HSQLDB', driver: 'org.hsqldb.jdbc.JDBCDriver', sampleUrl: 'jdbc:hsqldb:mem:testdb' },
+  { value: 'Informix', label: 'Informix', driver: 'com.informix.jdbc.IfxDriver', sampleUrl: 'jdbc:informix-sqli://localhost:9088/mydb:INFORMIXSERVER=server' },
+  { value: 'Firebird', label: 'Firebird', driver: 'org.firebirdsql.jdbc.FBDriver', sampleUrl: 'jdbc:firebirdsql://localhost:3050/mydb' },
+  { value: 'Other', label: 'Other (custom driver)', driver: '', sampleUrl: '' },
 ];
 
 const schema = z.object({
@@ -88,6 +84,9 @@ export function DatasourceFormModal({ datasource, onClose }: Props) {
     const dbDef = DATABASE_TYPES.find((d) => d.value === type);
     if (dbDef) {
       setValue('driver', dbDef.driver);
+      if (dbDef.sampleUrl && !getValues('url')) {
+        setValue('url', dbDef.sampleUrl);
+      }
     }
   };
 
