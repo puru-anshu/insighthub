@@ -1,20 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, Pencil, Play, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 
 import { EmptyState, LoadingSpinner, PageHeader } from '@/components/ui';
 
-import { deleteReport, fetchReports, type Report } from './api';
-import { ReportFormModal } from './ReportFormModal';
-import { RunReportModal } from './RunReportModal';
+import { deleteReport, fetchReports } from './api';
 
 export function ReportsPage() {
-  const [formReport, setFormReport] = useState<Report | null | undefined>(
-    undefined,
-  );
-  const [runReport, setRunReport] = useState<Report | null>(null);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const {
     data: reports,
@@ -42,7 +37,7 @@ export function ReportsPage() {
         actions={
           <button
             className="btn-primary"
-            onClick={() => setFormReport(null)}
+            onClick={() => navigate('/reports/new')}
           >
             <Plus className="mr-2 h-4 w-4" />
             Add Report
@@ -65,7 +60,7 @@ export function ReportsPage() {
           action={
             <button
               className="btn-primary"
-              onClick={() => setFormReport(null)}
+              onClick={() => navigate('/reports/new')}
             >
               <Plus className="mr-2 h-4 w-4" />
               Add Report
@@ -128,14 +123,14 @@ export function ReportsPage() {
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
                     <button
-                      onClick={() => setRunReport(report)}
+                      onClick={() => navigate(`/reports/${report.id}/run`)}
                       className="mr-2 text-green-600 hover:text-green-800"
                       title="Run"
                     >
                       <Play className="h-4 w-4" />
                     </button>
                     <button
-                      onClick={() => setFormReport(report)}
+                      onClick={() => navigate(`/reports/${report.id}/edit`)}
                       className="mr-2 text-primary-600 hover:text-primary-800"
                       title="Edit"
                     >
@@ -159,19 +154,6 @@ export function ReportsPage() {
         </div>
       )}
 
-      {formReport !== undefined && (
-        <ReportFormModal
-          report={formReport}
-          onClose={() => setFormReport(undefined)}
-        />
-      )}
-
-      {runReport && (
-        <RunReportModal
-          report={runReport}
-          onClose={() => setRunReport(null)}
-        />
-      )}
     </div>
   );
 }

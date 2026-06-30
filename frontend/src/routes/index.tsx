@@ -31,6 +31,15 @@ const ReportGroupsPageWrapper = lazy(() =>
 const ReportsPageWrapper = lazy(() =>
   import('@/features/reports').then((m) => ({ default: m.ReportsPage })),
 );
+const ReportBuilderPageWrapper = lazy(() =>
+  import('@/features/report-engine').then((m) => ({ default: m.ReportBuilderPage })),
+);
+const ReportRunnerPageWrapper = lazy(() =>
+  import('@/features/report-engine').then((m) => ({ default: m.ReportRunnerPage })),
+);
+const GuardrailsSettingsPageWrapper = lazy(() =>
+  import('@/features/report-engine').then((m) => ({ default: m.GuardrailsSettingsPage })),
+);
 const JobsPageWrapper = lazy(() =>
   import('@/features/jobs').then((m) => ({ default: m.JobsPage })),
 );
@@ -90,6 +99,38 @@ export function AppRouter() {
           element={
             <LazyPage>
               <ReportsPageWrapper />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="reports/new"
+          element={
+            <LazyPage>
+              <ReportBuilderPageWrapper />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="reports/:id/edit"
+          element={
+            <LazyPage>
+              <ReportBuilderPageWrapper />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="reports/:id/run"
+          element={
+            <LazyPage>
+              <ReportRunnerPageWrapper />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="guardrails"
+          element={
+            <LazyPage>
+              <GuardrailsSettingsPageWrapper />
             </LazyPage>
           }
         />

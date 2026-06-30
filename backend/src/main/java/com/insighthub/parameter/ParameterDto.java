@@ -3,6 +3,8 @@ package com.insighthub.parameter;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 @Builder
 public class ParameterDto {
@@ -10,9 +12,25 @@ public class ParameterDto {
     private Long reportId;
     private String name;
     private String label;
-    private String paramType;
+    /**
+     * Serialized as "type" in JSON to match frontend TypeScript interface.
+     */
+    private String type;
     private String defaultValue;
     private String placeholder;
     private boolean required;
     private int position;
+    private String lovType;
+    private String lovQuery;
+    private List<LovOptionDto> lovStaticValues;
+    private Long parentParamId;
+    private boolean multiValue;
+    private String dateRangePair;
+
+    @Data
+    @Builder
+    public static class LovOptionDto {
+        private String value;
+        private String label;
+    }
 }

@@ -45,4 +45,11 @@ public class ParameterController {
         parameterService.deleteParameter(id);
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping("/parameters/{id}/lov")
+    public ResponseEntity<LovResult> getParameterLov(
+            @PathVariable Long id,
+            @RequestParam(required = false) String parentValue) {
+        return ResponseEntity.ok(parameterService.resolveLov(id, parentValue));
+    }
 }

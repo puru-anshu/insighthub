@@ -1,5 +1,8 @@
 package com.insighthub.report;
 
+import com.insighthub.execution.ExecuteReportRequest;
+import com.insighthub.execution.PaginatedResult;
+import com.insighthub.execution.ReportExecutionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -17,6 +20,7 @@ public class ReportController {
 
     private final ReportService reportService;
     private final ReportRunService reportRunService;
+    private final ReportExecutionService reportExecutionService;
 
     @GetMapping
     public ResponseEntity<List<ReportDto>> getAllReports() {
@@ -55,5 +59,22 @@ public class ReportController {
             @PathVariable Long id,
             @RequestBody(required = false) java.util.Map<String, String> params) {
         return ResponseEntity.ok(reportRunService.runReport(id, params));
+    }
+
+    @PostMapping("/{id}/execute")
+    public ResponseEntity<PaginatedResult> executeReport(
+            @PathVariable Long id,
+            @Valid @RequestBody ExecuteReportRequest request,
+            @AuthenticationPrincipal UserDetails currentUser) {
+        PaginatedResult result = reportExecutionService.execute(id, request, currentUser.getUsername());
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{id}/clone")
+    public ResponseEntity<ReportDto> cloneReport(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails currentUser) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(reportService.cloneReport(id, currentUser.getUsername()));
     }
 }

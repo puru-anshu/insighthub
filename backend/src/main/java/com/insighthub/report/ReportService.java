@@ -3,6 +3,8 @@ package com.insighthub.report;
 import com.insighthub.common.exception.ResourceNotFoundException;
 import com.insighthub.datasource.DatasourceEntity;
 import com.insighthub.datasource.DatasourceRepository;
+import com.insighthub.parameter.ParameterEntity;
+import com.insighthub.parameter.ParameterRepository;
 import com.insighthub.reportgroup.ReportGroupEntity;
 import com.insighthub.reportgroup.ReportGroupRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,7 @@ public class ReportService {
     private final ReportRepository reportRepository;
     private final ReportGroupRepository reportGroupRepository;
     private final DatasourceRepository datasourceRepository;
+    private final ParameterRepository parameterRepository;
 
     public List<ReportDto> getAllReports() {
         return reportRepository.findAll().stream()
@@ -99,6 +102,52 @@ public class ReportService {
             throw new ResourceNotFoundException("Report", "id", id);
         }
         reportRepository.deleteById(id);
+    }
+
+    @Transactional
+    public ReportDto cloneReport(Long id, String username) {
+        ReportEntity source = reportRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Report", "id", id));
+
+        ReportEntity cloned = ReportEntity.builder()
+            .name(source.getName() + " (Copy)")
+            .shortDescription(source.getShortDescription())
+            .description(source.getDescription())
+            .reportType(source.getReportType())
+            .reportGroup(source.getReportGroup())
+            .datasource(source.getDatasource())
+            .contactPerson(source.getContactPerson())
+            .active(source.isActive())
+            .hidden(source.isHidden())
+            .reportSource(source.getReportSource())
+            .defaultReportFormat(source.getDefaultReportFormat())
+            .createdBy(username)
+            .build();
+
+        ReportEntity savedReport = reportRepository.save(cloned);
+
+        // Deep copy parameters (with new IDs), but NOT drill-down links or access rights
+        List<ParameterEntity> sourceParams = parameterRepository.findByReportIdOrderByPositionAsc(id);
+        for (ParameterEntity sourceParam : sourceParams) {
+            ParameterEntity clonedParam = ParameterEntity.builder()
+                .report(savedReport)
+                .name(sourceParam.getName())
+                .label(sourceParam.getLabel())
+                .paramType(sourceParam.getParamType())
+                .defaultValue(sourceParam.getDefaultValue())
+                .placeholder(sourceParam.getPlaceholder())
+                .required(sourceParam.isRequired())
+                .position(sourceParam.getPosition())
+                .lovType(sourceParam.getLovType())
+                .lovQuery(sourceParam.getLovQuery())
+                .lovStaticValues(sourceParam.getLovStaticValues())
+                .multiValue(sourceParam.isMultiValue())
+                .dateRangePair(sourceParam.getDateRangePair())
+                .build();
+            parameterRepository.save(clonedParam);
+        }
+
+        return toDtoWithSource(savedReport);
     }
 
     private ReportDto toDto(ReportEntity report) {
