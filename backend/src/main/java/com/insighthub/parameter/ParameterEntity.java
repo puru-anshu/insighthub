@@ -85,6 +85,41 @@ public class ParameterEntity {
     @Builder.Default
     private boolean multiValue = false;
 
+    // --- Hidden parameter support ---
+
+    /**
+     * Whether this parameter is hidden from the user-facing form.
+     * Hidden parameters still participate in SQL substitution with their
+     * default or fixed values.
+     */
+    @Column(name = "hidden", nullable = false)
+    @Builder.Default
+    private boolean hidden = false;
+
+    // --- Allow Null support ---
+
+    /**
+     * Whether this parameter allows the user to explicitly pass NULL as
+     * its value. When true, a "NULL" checkbox is rendered next to the input.
+     */
+    @Column(name = "allow_null", nullable = false)
+    @Builder.Default
+    private boolean allowNull = false;
+
+    // --- Date range picker configuration ---
+
+    /**
+     * For DATERANGE type: the name of the parameter that receives the from-date value.
+     */
+    @Column(name = "from_parameter_name", length = 100)
+    private String fromParameterName;
+
+    /**
+     * For DATERANGE type: the name of the parameter that receives the to-date value.
+     */
+    @Column(name = "to_parameter_name", length = 100)
+    private String toParameterName;
+
     // --- Date range pair support ---
 
     /**

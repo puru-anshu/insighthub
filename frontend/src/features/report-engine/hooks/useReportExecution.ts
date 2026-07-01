@@ -45,6 +45,7 @@ export function useReportExecution({ reportId }: UseReportExecutionOptions) {
 
   // Keep a ref to the latest params so re-executions (page/sort changes) use them
   const lastParamsRef = useRef<Record<string, string | string[]>>({});
+  const lastNullParamsRef = useRef<string[]>([]);
 
   const mutation = useMutation({
     mutationFn: (request: ExecuteReportRequest) =>
@@ -55,10 +56,12 @@ export function useReportExecution({ reportId }: UseReportExecutionOptions) {
    * Execute the report with the given parameters and current pagination/sort state.
    */
   const execute = useCallback(
-    (params: Record<string, string | string[]>) => {
+    (params: Record<string, string | string[]>, nullParams?: string[]) => {
       lastParamsRef.current = params;
+      lastNullParamsRef.current = nullParams ?? [];
       mutation.mutate({
         params,
+        nullParams: nullParams && nullParams.length > 0 ? nullParams : undefined,
         page,
         pageSize,
         sortColumn,
@@ -89,6 +92,7 @@ export function useReportExecution({ reportId }: UseReportExecutionOptions) {
 
       mutation.mutate({
         params: lastParamsRef.current,
+        nullParams: lastNullParamsRef.current.length > 0 ? lastNullParamsRef.current : undefined,
         page: effectivePage,
         pageSize: effectivePageSize,
         sortColumn: effectiveSortColumn,

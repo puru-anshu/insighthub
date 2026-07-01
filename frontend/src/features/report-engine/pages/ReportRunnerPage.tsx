@@ -37,6 +37,7 @@ export function ReportRunnerPage() {
   const reportId = Number(id);
 
   const [paramValues, setParamValues] = useState<ParameterValues>({});
+  const [nullParams, setNullParams] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   // Load report metadata
@@ -77,8 +78,8 @@ export function ReportRunnerPage() {
   } = useExport({ reportId });
 
   const handleRun = useCallback(() => {
-    execute(paramValues);
-  }, [execute, paramValues]);
+    execute(paramValues, nullParams);
+  }, [execute, paramValues, nullParams]);
 
   // Export handlers — pass current params to export endpoints
   const handleExportCsv = useCallback(() => {
@@ -154,6 +155,8 @@ export function ReportRunnerPage() {
           values={paramValues}
           onChange={setParamValues}
           disabled={executing}
+          nullParams={nullParams}
+          onNullParamsChange={setNullParams}
         />
       </section>
 

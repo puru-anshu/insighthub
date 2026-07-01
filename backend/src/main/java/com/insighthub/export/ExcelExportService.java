@@ -1,5 +1,6 @@
 package com.insighthub.export;
 
+import com.insighthub.execution.BindValue;
 import com.insighthub.guardrails.GuardrailsConfigEntity;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
@@ -11,6 +12,7 @@ import javax.sql.DataSource;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.sql.*;
+import java.util.List;
 
 /**
  * Streaming XLSX export service using Apache POI's SXSSFWorkbook.
@@ -182,6 +184,145 @@ public class ExcelExportService {
             closeQuietly(resultSet);
             closeQuietly(statement);
             closeQuietly(connection);
+        }
+    }
+
+    /**
+     * Exports report results as a streaming XLSX file using a PreparedStatement with parameter bindings.
+     *
+     * <p>This overload supports the prepared statement execution path (Requirement 5.4).
+     * It binds parameter values via {@code PreparedStatement.setXxx()} for SQL injection prevention.</p>
+     *
+     * @param dataSource   the JDBC DataSource to execute the query against
+     * @param sql          the SQL query with {@code ?} positional placeholders
+     * @param bindings     ordered list of binding values for the prepared statement
+     * @param guardrails   the effective guardrails config (max_export_rows, timeout)
+     * @param outputStream the OutputStream to write the XLSX content to
+     * @return ExportResult with row count and truncation information
+     * @throws IOException if an I/O error occurs writing to the OutputStream
+     */
+    public ExportResult export(DataSource dataSource, String sql, List<BindValue> bindings,
+                               GuardrailsConfigEntity guardrails,
+                               OutputStream outputStream) throws IOException {
+        int maxExportRows = guardrails.getMaxExportRows();
+        int timeoutSeconds = guardrails.getExecutionTimeoutSeconds();
+
+        Connection connection = null;
+        PreparedStatement preparedStatement = null;
+        ResultSet resultSet = null;
+        SXSSFWorkbook workbook = null;
+
+        long rowsExported = 0;
+        boolean truncated = false;
+        String truncationReason = null;
+
+        try {
+            connection = dataSource.getConnection();
+
+            preparedStatement = connection.prepareStatement(sql,
+                    ResultSet.TYPE_FORWARD_ONLY,
+                    ResultSet.CONCUR_READ_ONLY);
+            preparedStatement.setFetchSize(DEFAULT_FETCH_SIZE);
+            preparedStatement.setQueryTimeout(timeoutSeconds);
+
+            // Bind parameters
+            bindParameters(preparedStatement, bindings);
+
+            resultSet = preparedStatement.executeQuery();
+
+            // Extract column metadata
+            ResultSetMetaData metaData = resultSet.getMetaData();
+            int columnCount = metaData.getColumnCount();
+            String[] columnNames = new String[columnCount];
+            for (int i = 0; i < columnCount; i++) {
+                columnNames[i] = metaData.getColumnLabel(i + 1);
+            }
+
+            // Create SXSSFWorkbook with 100-row memory window
+            workbook = new SXSSFWorkbook(SXSSF_WINDOW_SIZE);
+            workbook.setCompressTempFiles(true);
+
+            SXSSFSheet sheet = workbook.createSheet("Report");
+
+            for (int i = 0; i < columnCount; i++) {
+                sheet.trackColumnForAutoSizing(i);
+            }
+
+            CellStyle headerStyle = createHeaderStyle(workbook);
+
+            Row headerRow = sheet.createRow(0);
+            for (int i = 0; i < columnCount; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(columnNames[i]);
+                cell.setCellStyle(headerStyle);
+            }
+
+            int rowIndex = 1;
+            while (resultSet.next()) {
+                if (rowsExported >= maxExportRows) {
+                    truncated = true;
+                    truncationReason = "max_export_rows";
+                    log.warn("Export truncated at {} rows (max_export_rows guardrail)", maxExportRows);
+                    break;
+                }
+
+                Row dataRow = sheet.createRow(rowIndex);
+                for (int i = 0; i < columnCount; i++) {
+                    Cell cell = dataRow.createCell(i);
+                    setCellValue(cell, resultSet, i + 1, metaData.getColumnType(i + 1));
+                }
+
+                rowsExported++;
+                rowIndex++;
+
+                if (rowsExported % FLUSH_INTERVAL == 0) {
+                    sheet.flushRows(SXSSF_WINDOW_SIZE);
+                }
+            }
+
+            for (int i = 0; i < columnCount; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            workbook.write(outputStream);
+            outputStream.flush();
+
+            log.info("XLSX export (prepared statement) completed: {} rows exported, truncated={}", rowsExported, truncated);
+            return new ExportResult(rowsExported, truncated, truncationReason);
+
+        } catch (SQLTimeoutException e) {
+            log.warn("Export query timed out after {} seconds", timeoutSeconds);
+            throw new ExportException("Export query timed out after " + timeoutSeconds + " seconds", e);
+        } catch (SQLException e) {
+            log.error("SQL error during XLSX export: {}", e.getMessage());
+            throw new ExportException("SQL error during export: " + e.getMessage(), e);
+        } finally {
+            if (workbook != null) {
+                workbook.dispose();
+            }
+            closeQuietly(resultSet);
+            closeQuietly(preparedStatement);
+            closeQuietly(connection);
+        }
+    }
+
+    /**
+     * Binds parameter values to a PreparedStatement using their declared JDBC types.
+     *
+     * @param stmt     the PreparedStatement to bind values to
+     * @param bindings the ordered list of binding values
+     * @throws SQLException if a binding operation fails
+     */
+    private void bindParameters(PreparedStatement stmt, List<BindValue> bindings) throws SQLException {
+        for (int i = 0; i < bindings.size(); i++) {
+            BindValue binding = bindings.get(i);
+            int paramIndex = i + 1;
+
+            if (binding.value() == null) {
+                stmt.setNull(paramIndex, binding.jdbcType());
+            } else {
+                stmt.setObject(paramIndex, binding.value(), binding.jdbcType());
+            }
         }
     }
 

@@ -5,6 +5,7 @@ import com.insighthub.common.exception.ResourceNotFoundException;
 import com.insighthub.datasource.DatasourceEntity;
 import com.insighthub.drilldown.DrillDownLinkEntity;
 import com.insighthub.drilldown.DrillDownRepository;
+import com.insighthub.fixedvalue.FixedParameterValueService;
 import com.insighthub.guardrails.GuardrailsConfigEntity;
 import com.insighthub.guardrails.GuardrailsService;
 import com.insighthub.parameter.ExpressionResolver;
@@ -25,18 +26,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
+import java.sql.Types;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Main 7-step orchestrator for report execution.
+ * Main 9-step orchestrator for report execution.
  *
  * <p>Execution pipeline:</p>
  * <ol>
  *   <li>RBAC Check — verify user has access to the report</li>
  *   <li>Parameter Resolution — resolve expressions, apply defaults</li>
+ *   <li>Parameter Validation — validate required, type, null state</li>
  *   <li>Guardrails Check — concurrency limit, date range validation</li>
- *   <li>SQL Construction — parameter substitution with escaping, ORDER BY, LIMIT/OFFSET</li>
+ *   <li>X-Parameter Processing — replace {@code $x{...}} blocks with SQL fragments (if prepared statements enabled)</li>
+ *   <li>SQL Construction — prepared statement binding OR string substitution</li>
  *   <li>Streaming Execution — cursor-based query via StreamingResultSetHandler</li>
  *   <li>Result Assembly — build PaginatedResult DTO with drill-down info</li>
  *   <li>Resource Cleanup — release concurrency counter in finally block</li>
@@ -44,7 +48,8 @@ import java.util.stream.Collectors;
  *
  * <p>Key properties enforced:</p>
  * <ul>
- *   <li>Property 4: All :paramName substitutions escape single quotes (' → '')</li>
+ *   <li>Property 4: All :paramName substitutions escape single quotes (' → '') (fallback path)</li>
+ *   <li>Property 5: Prepared statement binding for SQL injection prevention (preferred path)</li>
  *   <li>Property 6: Concurrency counter release in finally block</li>
  * </ul>
  */
@@ -65,6 +70,9 @@ public class ReportExecutionService {
     private final GuardrailsService guardrailsService;
     private final StreamingResultSetHandler streamingResultSetHandler;
     private final DrillDownRepository drillDownRepository;
+    private final XParameterProcessor xParameterProcessor;
+    private final SqlParameterBinder sqlParameterBinder;
+    private final FixedParameterValueService fixedParameterValueService;
 
     /**
      * Executes a report through the full 7-step pipeline.
@@ -92,6 +100,18 @@ public class ReportExecutionService {
         // ===== Step 1: RBAC Check (Requirements 12.1, 12.2, 12.3, 12.4) =====
         checkAccess(user, report);
 
+        // ===== Step 1.5: Fixed Value Resolution (Requirement 6) =====
+        // Resolve fixed parameter values for this user — these override user-supplied values.
+        // Fixed values are already resolved through ExpressionResolver by the service.
+        Map<String, Object> fixedValues = fixedParameterValueService.resolveFixedValuesForExecution(reportId, user.getId());
+
+        // Merge fixed values into user-supplied params (fixed values override user input)
+        Map<String, Object> mergedParams = new HashMap<>();
+        if (request.getParams() != null) {
+            mergedParams.putAll(request.getParams());
+        }
+        mergedParams.putAll(fixedValues);
+
         // Load guardrails for concurrency check
         GuardrailsConfigEntity guardrails = guardrailsService.getEffectiveGuardrails(reportId);
 
@@ -106,7 +126,18 @@ public class ReportExecutionService {
         try {
             // ===== Step 2: Parameter Resolution (Requirements 13.1, 13.4, 14.1-14.6) =====
             List<ParameterEntity> parameterDefs = parameterRepository.findByReportIdOrderByPositionAsc(reportId);
-            Map<String, Object> resolvedParams = resolveParameters(parameterDefs, request.getParams());
+            Map<String, Object> resolvedParams = resolveParameters(parameterDefs, mergedParams);
+
+            // ===== Step 2.5: Null Parameter Handling (Requirement 3) =====
+            // For each parameter listed in nullParams, override its resolved value with null.
+            // This ensures the prepared statement path uses setNull() and the fallback path
+            // substitutes the literal SQL keyword NULL.
+            List<String> nullParams = request.getNullParams();
+            if (nullParams != null && !nullParams.isEmpty()) {
+                for (String nullParamName : nullParams) {
+                    resolvedParams.put(nullParamName, null);
+                }
+            }
 
             // Validate parameters
             parameterValidator.validate(parameterDefs, resolvedParams);
@@ -114,17 +145,65 @@ public class ReportExecutionService {
             // ===== Step 3: Guardrails Check — date range (Requirements 20.1, 20.2, 20.3) =====
             executionGuard.validate(reportId, resolvedParams);
 
-            // ===== Step 4: SQL Construction (Requirements 22.1, 22.2, 24.1, 24.2, 24.3) =====
-            String sql = constructSql(report.getReportSource(), parameterDefs, resolvedParams,
-                    request.getSortColumn(), request.getSortDirection());
-
-            // ===== Step 5: Streaming Execution (Requirement 17.1-17.4) =====
+            // ===== Step 4–5: SQL Construction + Execution =====
+            // Branch based on report.usePreparedStatements flag (Requirement 5.5, 5.6)
             long startTime = System.currentTimeMillis();
             DataSource dataSource = createDataSource(report.getDatasource());
+            StreamingResultSetHandler.StreamingResult streamingResult;
 
-            StreamingResultSetHandler.StreamingResult streamingResult =
-                    streamingResultSetHandler.execute(dataSource, sql, guardrails,
-                            request.getPage(), request.getPageSize());
+            if (report.isUsePreparedStatements()) {
+                // === Prepared Statement Path (Requirement 5) ===
+                String sql = report.getReportSource();
+                if (sql == null || sql.isBlank()) {
+                    throw new IllegalArgumentException("Report SQL source is empty");
+                }
+
+                // Step 5a: X-Parameter Processing — replace $x{...} blocks with SQL fragments
+                XParameterResult xResult = xParameterProcessor.process(sql, resolvedParams);
+                String processedSql = xResult.processedSql();
+                List<Object> xBindings = xResult.bindings();
+
+                // Remove x-parameter-consumed params from the map passed to SqlParameterBinder
+                // (x-params are already processed and bound)
+                Map<String, Object> remainingParams = new HashMap<>(resolvedParams);
+
+                // Step 5b: Build paramTypes map from parameter definitions (paramName → paramType)
+                Map<String, String> paramTypes = parameterDefs.stream()
+                        .collect(Collectors.toMap(
+                                ParameterEntity::getName,
+                                ParameterEntity::getParamType,
+                                (existing, replacement) -> existing
+                        ));
+
+                // Step 5c: SqlParameterBinder — replace :paramName → ? and collect bindings
+                BindResult bindResult = sqlParameterBinder.bind(processedSql, remainingParams, paramTypes);
+                String finalSql = bindResult.processedSql();
+
+                // Append ORDER BY if sort is requested
+                finalSql = appendOrderBy(finalSql, request.getSortColumn(), request.getSortDirection());
+
+                // Step 5d: Combine x-param bindings with binder bindings
+                // X-param bindings come first since they're processed first in the SQL
+                List<BindValue> allBindings = new ArrayList<>();
+                for (Object xVal : xBindings) {
+                    allBindings.add(new BindValue(xVal, Types.VARCHAR));
+                }
+                allBindings.addAll(bindResult.bindings());
+
+                // Step 5e: Execute with PreparedStatement
+                streamingResult = streamingResultSetHandler.execute(
+                        dataSource, finalSql, allBindings, guardrails,
+                        request.getPage(), request.getPageSize());
+            } else {
+                // === String Substitution Fallback Path (Requirement 5.5) ===
+                String sql = constructSql(report.getReportSource(), parameterDefs, resolvedParams,
+                        request.getSortColumn(), request.getSortDirection());
+
+                // Execute with plain Statement (no bindings)
+                streamingResult = streamingResultSetHandler.execute(
+                        dataSource, sql, guardrails,
+                        request.getPage(), request.getPageSize());
+            }
 
             long executionMs = System.currentTimeMillis() - startTime;
 
@@ -254,7 +333,10 @@ public class ReportExecutionService {
             }
 
             String substitution;
-            if (multiValueParams.contains(paramName) && value instanceof List<?> values) {
+            if (value == null) {
+                // Null value: substitute literal SQL NULL keyword (Requirement 3.5)
+                substitution = "NULL";
+            } else if (multiValueParams.contains(paramName) && value instanceof List<?> values) {
                 // Multi-value expansion: 'val1','val2','val3'
                 substitution = values.stream()
                         .map(v -> "'" + escapeSingleQuotes(v.toString()) + "'")
@@ -264,8 +346,7 @@ public class ReportExecutionService {
                 }
             } else {
                 // Single value substitution with quote escaping
-                String strValue = value != null ? value.toString() : "";
-                substitution = "'" + escapeSingleQuotes(strValue) + "'";
+                substitution = "'" + escapeSingleQuotes(value.toString()) + "'";
             }
 
             sql = sql.replace(placeholder, substitution);
@@ -296,6 +377,30 @@ public class ReportExecutionService {
             return "";
         }
         return value.replace("'", "''");
+    }
+
+    /**
+     * Appends an ORDER BY clause to the SQL if sort is requested.
+     * Validates the sort column to prevent SQL injection (only allows alphanumeric and underscore).
+     *
+     * @param sql           the SQL query to append ORDER BY to
+     * @param sortColumn    the column to sort by (may be null)
+     * @param sortDirection ASC or DESC (may be null, defaults to ASC)
+     * @return the SQL with ORDER BY appended if applicable
+     */
+    private String appendOrderBy(String sql, String sortColumn, String sortDirection) {
+        if (sortColumn != null && !sortColumn.isBlank()) {
+            String direction = "ASC";
+            if (sortDirection != null && sortDirection.equalsIgnoreCase("DESC")) {
+                direction = "DESC";
+            }
+            // Validate sort column to prevent SQL injection (only allow alphanumeric and underscore)
+            String safeSortColumn = sortColumn.replaceAll("[^a-zA-Z0-9_]", "");
+            if (!safeSortColumn.isEmpty()) {
+                sql = sql + " ORDER BY " + safeSortColumn + " " + direction;
+            }
+        }
+        return sql;
     }
 
     /**

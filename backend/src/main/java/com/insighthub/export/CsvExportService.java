@@ -1,5 +1,6 @@
 package com.insighthub.export;
 
+import com.insighthub.execution.BindValue;
 import com.insighthub.guardrails.GuardrailsConfigEntity;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -141,6 +142,127 @@ public class CsvExportService {
             closeQuietly(resultSet);
             closeQuietly(statement);
             closeQuietly(connection);
+        }
+    }
+
+    /**
+     * Exports report query results as CSV using a PreparedStatement with parameter bindings.
+     *
+     * <p>This overload supports the prepared statement execution path (Requirement 5.4).
+     * It binds parameter values via {@code PreparedStatement.setXxx()} for SQL injection prevention.</p>
+     *
+     * @param dataSource   the JDBC DataSource to execute the query against
+     * @param sql          the SQL query with {@code ?} positional placeholders
+     * @param bindings     ordered list of binding values for the prepared statement
+     * @param guardrails   the effective guardrails config (maxExportRows, executionTimeoutSeconds)
+     * @param outputStream the target OutputStream (typically the HTTP response output stream)
+     * @param reportName   the report name (used for logging context)
+     */
+    public void export(DataSource dataSource, String sql, List<BindValue> bindings,
+                       GuardrailsConfigEntity guardrails, OutputStream outputStream, String reportName) {
+        Connection connection = null;
+        PreparedStatement preparedStatement = null;
+        ResultSet resultSet = null;
+
+        try {
+            connection = dataSource.getConnection();
+
+            preparedStatement = connection.prepareStatement(sql,
+                    ResultSet.TYPE_FORWARD_ONLY,
+                    ResultSet.CONCUR_READ_ONLY);
+
+            // Configure fetch size and timeout
+            int fetchSize = Math.min(1000, guardrails.getMaxExportRows());
+            preparedStatement.setFetchSize(fetchSize);
+            preparedStatement.setQueryTimeout(guardrails.getExecutionTimeoutSeconds());
+
+            // Bind parameters
+            bindParameters(preparedStatement, bindings);
+
+            resultSet = preparedStatement.executeQuery();
+
+            // Extract column names from ResultSet metadata
+            ResultSetMetaData metaData = resultSet.getMetaData();
+            int columnCount = metaData.getColumnCount();
+            List<String> columns = new ArrayList<>(columnCount);
+            for (int i = 1; i <= columnCount; i++) {
+                columns.add(metaData.getColumnLabel(i));
+            }
+
+            // Write CSV output using PrintWriter for streaming
+            PrintWriter writer = new PrintWriter(
+                    new OutputStreamWriter(outputStream, StandardCharsets.UTF_8), false);
+
+            // Write header row
+            writeRow(writer, columns);
+
+            // Stream data rows from cursor
+            int maxExportRows = guardrails.getMaxExportRows();
+            long rowCount = 0;
+            boolean truncated = false;
+
+            while (resultSet.next()) {
+                rowCount++;
+
+                if (rowCount > maxExportRows) {
+                    truncated = true;
+                    log.warn("CSV export for report '{}' exceeded max export rows guardrail ({}). "
+                                    + "Export stopped at {} rows.",
+                            reportName, maxExportRows, maxExportRows);
+                    break;
+                }
+
+                List<String> rowValues = new ArrayList<>(columnCount);
+                for (int i = 1; i <= columnCount; i++) {
+                    Object value = resultSet.getObject(i);
+                    rowValues.add(value != null ? value.toString() : "");
+                }
+
+                writeRow(writer, rowValues);
+            }
+
+            writer.flush();
+
+            if (truncated) {
+                log.info("CSV export for report '{}' completed with truncation at {} rows (max: {}).",
+                        reportName, maxExportRows, maxExportRows);
+            } else {
+                log.info("CSV export for report '{}' completed successfully with {} rows.",
+                        reportName, rowCount);
+            }
+
+        } catch (SQLTimeoutException e) {
+            log.error("CSV export query timed out for report '{}' after {} seconds.",
+                    reportName, guardrails.getExecutionTimeoutSeconds());
+            throw new ExportException("Export query timed out after "
+                    + guardrails.getExecutionTimeoutSeconds() + " seconds", e);
+        } catch (SQLException e) {
+            log.error("CSV export SQL error for report '{}': {}", reportName, e.getMessage());
+            throw new ExportException("Export failed: " + e.getMessage(), e);
+        } finally {
+            closeQuietly(resultSet);
+            closeQuietly(preparedStatement);
+            closeQuietly(connection);
+        }
+    }
+
+    /**
+     * Binds parameter values to a PreparedStatement using their declared JDBC types.
+     *
+     * @param stmt     the PreparedStatement to bind values to
+     * @param bindings the ordered list of binding values
+     * @throws SQLException if a binding operation fails
+     */
+    private void bindParameters(PreparedStatement stmt, List<BindValue> bindings) throws SQLException {
+        for (int i = 0; i < bindings.size(); i++) {
+            BindValue binding = bindings.get(i);
+            int paramIndex = i + 1;
+
+            if (binding.value() == null) {
+                stmt.setNull(paramIndex, binding.jdbcType());
+            } else {
+                stmt.setObject(paramIndex, binding.value(), binding.jdbcType());
+            }
         }
     }
 

@@ -46,6 +46,32 @@ public class ParameterRequest {
 
     private String dateRangePair;
 
+    // --- Parameter enhancement fields ---
+
+    /**
+     * When true, the parameter is not displayed to users but still participates
+     * in SQL substitution with its default or fixed values.
+     */
+    private boolean hidden;
+
+    /**
+     * When true, a "NULL" checkbox is rendered next to the parameter input,
+     * allowing users to pass NULL as the parameter value.
+     */
+    private boolean allowNull;
+
+    /**
+     * For DATERANGE type: the name of the parameter that receives the from-date value.
+     */
+    @Size(max = 100)
+    private String fromParameterName;
+
+    /**
+     * For DATERANGE type: the name of the parameter that receives the to-date value.
+     */
+    @Size(max = 100)
+    private String toParameterName;
+
     /**
      * Nested class for static LOV value/label pairs.
      */

@@ -29,7 +29,8 @@ export type ParameterType =
   | 'DATE'
   | 'DATETIME'
   | 'BOOLEAN'
-  | 'DROPDOWN';
+  | 'DROPDOWN'
+  | 'DATERANGE';
 
 export type LovType = 'DYNAMIC' | 'STATIC';
 
@@ -56,6 +57,10 @@ export interface Parameter {
   parentParamId?: number;
   multiValue: boolean;
   dateRangePair?: DateRangePair;
+  hidden: boolean;
+  allowNull: boolean;
+  fromParameterName?: string;
+  toParameterName?: string;
 }
 
 // === Drill-Down ===
@@ -95,6 +100,7 @@ export type SortDirection = 'ASC' | 'DESC';
 
 export interface ExecuteReportRequest {
   params: Record<string, string | string[]>;
+  nullParams?: string[];
   page: number;
   pageSize: number;
   sortColumn?: string;

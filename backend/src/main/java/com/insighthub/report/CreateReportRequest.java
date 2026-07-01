@@ -28,6 +28,8 @@ public class CreateReportRequest {
 
     private boolean active = true;
 
+    private boolean usePreparedStatements = true;
+
     private String reportSource;
 
     @Size(max = 50)

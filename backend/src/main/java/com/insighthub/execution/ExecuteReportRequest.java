@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
 import java.util.Map;
 
 @Data
@@ -17,6 +18,8 @@ import java.util.Map;
 public class ExecuteReportRequest {
 
     private Map<String, Object> params;
+
+    private List<String> nullParams;
 
     @Min(value = 1, message = "Page must be at least 1")
     @Builder.Default

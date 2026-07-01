@@ -3,7 +3,7 @@ package com.insighthub.export;
 import com.insighthub.accessright.AccessRightService;
 import com.insighthub.common.exception.ResourceNotFoundException;
 import com.insighthub.datasource.DatasourceEntity;
-import com.insighthub.execution.SqlParameterSubstitutor;
+import com.insighthub.execution.*;
 import com.insighthub.guardrails.GuardrailsConfigEntity;
 import com.insighthub.guardrails.GuardrailsService;
 import com.insighthub.parameter.ExpressionResolver;
@@ -29,9 +29,9 @@ import javax.sql.DataSource;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.sql.Types;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * REST controller for streaming report exports in CSV, XLSX, and PDF formats.
@@ -63,6 +63,8 @@ public class ExportController {
     private final GuardrailsService guardrailsService;
     private final ExpressionResolver expressionResolver;
     private final SqlParameterSubstitutor sqlParameterSubstitutor;
+    private final XParameterProcessor xParameterProcessor;
+    private final SqlParameterBinder sqlParameterBinder;
     private final CsvExportService csvExportService;
     private final ExcelExportService excelExportService;
     private final PdfExportService pdfExportService;
@@ -81,7 +83,6 @@ public class ExportController {
 
         ReportEntity report = loadAndAuthorize(id, currentUser.getUsername());
         GuardrailsConfigEntity guardrails = guardrailsService.getEffectiveGuardrails(id);
-        String sql = buildExportSql(report, request);
         DataSource dataSource = createDataSource(report.getDatasource());
 
         String filename = sanitizeFilename(report.getName()) + ".csv";
@@ -92,7 +93,17 @@ public class ExportController {
                         + URLEncoder.encode(filename, StandardCharsets.UTF_8));
 
         log.info("Starting CSV export for report '{}' (id={})", report.getName(), id);
-        csvExportService.export(dataSource, sql, guardrails, response.getOutputStream(), report.getName());
+
+        if (report.isUsePreparedStatements()) {
+            // Prepared statement path (Requirement 5.4)
+            ExportBindResult bindResult = buildPreparedExportSql(report, request);
+            csvExportService.export(dataSource, bindResult.sql(), bindResult.bindings(),
+                    guardrails, response.getOutputStream(), report.getName());
+        } else {
+            // String substitution fallback
+            String sql = buildExportSql(report, request);
+            csvExportService.export(dataSource, sql, guardrails, response.getOutputStream(), report.getName());
+        }
     }
 
     /**
@@ -109,7 +120,6 @@ public class ExportController {
 
         ReportEntity report = loadAndAuthorize(id, currentUser.getUsername());
         GuardrailsConfigEntity guardrails = guardrailsService.getEffectiveGuardrails(id);
-        String sql = buildExportSql(report, request);
         DataSource dataSource = createDataSource(report.getDatasource());
 
         String filename = sanitizeFilename(report.getName()) + ".xlsx";
@@ -119,7 +129,17 @@ public class ExportController {
                         + URLEncoder.encode(filename, StandardCharsets.UTF_8));
 
         log.info("Starting XLSX export for report '{}' (id={})", report.getName(), id);
-        excelExportService.export(dataSource, sql, guardrails, response.getOutputStream());
+
+        if (report.isUsePreparedStatements()) {
+            // Prepared statement path (Requirement 5.4)
+            ExportBindResult bindResult = buildPreparedExportSql(report, request);
+            excelExportService.export(dataSource, bindResult.sql(), bindResult.bindings(),
+                    guardrails, response.getOutputStream());
+        } else {
+            // String substitution fallback
+            String sql = buildExportSql(report, request);
+            excelExportService.export(dataSource, sql, guardrails, response.getOutputStream());
+        }
     }
 
     /**
@@ -136,7 +156,6 @@ public class ExportController {
 
         ReportEntity report = loadAndAuthorize(id, currentUser.getUsername());
         GuardrailsConfigEntity guardrails = guardrailsService.getEffectiveGuardrails(id);
-        String sql = buildExportSql(report, request);
         DataSource dataSource = createDataSource(report.getDatasource());
 
         String filename = sanitizeFilename(report.getName()) + ".pdf";
@@ -146,7 +165,17 @@ public class ExportController {
                         + URLEncoder.encode(filename, StandardCharsets.UTF_8));
 
         log.info("Starting PDF export for report '{}' (id={})", report.getName(), id);
-        pdfExportService.export(dataSource, sql, report.getName(), guardrails, response.getOutputStream());
+
+        if (report.isUsePreparedStatements()) {
+            // Prepared statement path (Requirement 5.4)
+            ExportBindResult bindResult = buildPreparedExportSql(report, request);
+            pdfExportService.export(dataSource, bindResult.sql(), bindResult.bindings(),
+                    report.getName(), guardrails, response.getOutputStream());
+        } else {
+            // String substitution fallback
+            String sql = buildExportSql(report, request);
+            pdfExportService.export(dataSource, sql, report.getName(), guardrails, response.getOutputStream());
+        }
     }
 
     // ===== Private helpers =====
@@ -228,7 +257,7 @@ public class ExportController {
 
     /**
      * Builds the fully-substituted SQL for export by resolving parameter defaults
-     * and substituting all :paramName placeholders.
+     * and substituting all :paramName placeholders using string substitution (fallback path).
      */
     private String buildExportSql(ReportEntity report, ExportRequest request) {
         String sql = report.getReportSource();
@@ -258,6 +287,80 @@ public class ExportController {
 
         // Substitute parameters into SQL using SqlParameterSubstitutor (Property 4)
         return sqlParameterSubstitutor.substitute(sql, params);
+    }
+
+    /**
+     * Builds export SQL using the prepared statement path: processes $x{...} blocks
+     * via XParameterProcessor, then converts :paramName placeholders to positional ? parameters
+     * via SqlParameterBinder.
+     *
+     * <p>This method implements the same branching logic as ReportExecutionService
+     * for the prepared statement execution path (Requirement 5.4).</p>
+     *
+     * @param report  the report entity
+     * @param request the export request containing user-supplied parameters
+     * @return an ExportBindResult containing the processed SQL and ordered bindings
+     */
+    private ExportBindResult buildPreparedExportSql(ReportEntity report, ExportRequest request) {
+        String sql = report.getReportSource();
+        if (sql == null || sql.isBlank()) {
+            throw new IllegalArgumentException("Report has no SQL source configured");
+        }
+
+        // Merge supplied params with resolved defaults
+        Map<String, Object> params = new HashMap<>();
+        List<ParameterEntity> parameterDefs = parameterRepository.findByReportIdOrderByPositionAsc(report.getId());
+
+        // Apply user-supplied params
+        if (request != null && request.getParams() != null) {
+            params.putAll(request.getParams());
+        }
+
+        // Fill in defaults for missing parameters using expression resolution
+        for (ParameterEntity paramDef : parameterDefs) {
+            String paramName = paramDef.getName();
+            if (!params.containsKey(paramName) || isBlankValue(params.get(paramName))) {
+                String defaultValue = paramDef.getDefaultValue();
+                if (defaultValue != null && !defaultValue.isBlank()) {
+                    params.put(paramName, expressionResolver.resolve(defaultValue));
+                }
+            }
+        }
+
+        // Step 1: X-Parameter Processing — replace $x{...} blocks with SQL fragments
+        XParameterResult xResult = xParameterProcessor.process(sql, params);
+        String processedSql = xResult.processedSql();
+        List<Object> xBindings = xResult.bindings();
+
+        // Step 2: Build paramTypes map from parameter definitions
+        Map<String, String> paramTypes = parameterDefs.stream()
+                .collect(Collectors.toMap(
+                        ParameterEntity::getName,
+                        ParameterEntity::getParamType,
+                        (existing, replacement) -> existing
+                ));
+
+        // Step 3: SqlParameterBinder — replace :paramName → ? and collect bindings
+        BindResult bindResult = sqlParameterBinder.bind(processedSql, params, paramTypes);
+        String finalSql = bindResult.processedSql();
+
+        // Step 4: Combine x-param bindings with binder bindings
+        List<BindValue> allBindings = new ArrayList<>();
+        for (Object xVal : xBindings) {
+            allBindings.add(new BindValue(xVal, Types.VARCHAR));
+        }
+        allBindings.addAll(bindResult.bindings());
+
+        return new ExportBindResult(finalSql, allBindings);
+    }
+
+    /**
+     * Result of building export SQL with prepared statement bindings.
+     *
+     * @param sql      the processed SQL with positional {@code ?} placeholders
+     * @param bindings ordered list of binding values for PreparedStatement
+     */
+    private record ExportBindResult(String sql, List<BindValue> bindings) {
     }
 
     /**

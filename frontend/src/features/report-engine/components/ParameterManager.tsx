@@ -58,6 +58,7 @@ const PARAMETER_TYPES: ParameterType[] = [
   'DATETIME',
   'BOOLEAN',
   'DROPDOWN',
+  'DATERANGE',
 ];
 
 const LOV_TYPES: LovType[] = ['DYNAMIC', 'STATIC'];
@@ -74,6 +75,10 @@ interface ParameterFormData {
   lovStaticValues?: LovOption[];
   parentParamId?: number | null;
   multiValue: boolean;
+  hidden: boolean;
+  allowNull: boolean;
+  fromParameterName?: string;
+  toParameterName?: string;
 }
 
 interface ParameterManagerProps {
@@ -161,6 +166,10 @@ export function ParameterManager({ reportId }: ParameterManagerProps) {
         lovStaticValues: paramA.lovStaticValues,
         parentParamId: paramA.parentParamId ?? null,
         multiValue: paramA.multiValue,
+        hidden: paramA.hidden,
+        allowNull: paramA.allowNull,
+        fromParameterName: paramA.fromParameterName,
+        toParameterName: paramA.toParameterName,
       });
       await updateParameter(paramB.id, {
         name: paramB.name,
@@ -174,6 +183,10 @@ export function ParameterManager({ reportId }: ParameterManagerProps) {
         lovStaticValues: paramB.lovStaticValues,
         parentParamId: paramB.parentParamId ?? null,
         multiValue: paramB.multiValue,
+        hidden: paramB.hidden,
+        allowNull: paramB.allowNull,
+        fromParameterName: paramB.fromParameterName,
+        toParameterName: paramB.toParameterName,
       });
       queryClient.invalidateQueries({
         queryKey: ['report-parameters', reportId],
@@ -238,6 +251,12 @@ export function ParameterManager({ reportId }: ParameterManagerProps) {
                 <th className="px-3 py-2 text-center font-medium text-gray-600">
                   Multi
                 </th>
+                <th className="px-3 py-2 text-center font-medium text-gray-600">
+                  Hidden
+                </th>
+                <th className="px-3 py-2 text-center font-medium text-gray-600">
+                  Allow Null
+                </th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">
                   LOV
                 </th>
@@ -271,6 +290,20 @@ export function ParameterManager({ reportId }: ParameterManagerProps) {
                   </td>
                   <td className="px-3 py-2 text-center">
                     {param.multiValue ? (
+                      <span className="text-green-600">✓</span>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    {param.hidden ? (
+                      <span className="text-green-600">✓</span>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    {param.allowNull ? (
                       <span className="text-green-600">✓</span>
                     ) : (
                       <span className="text-gray-300">—</span>
@@ -368,6 +401,14 @@ function ParameterFormModal({
   const [required, setRequired] = useState(parameter?.required ?? false);
   const [position, setPosition] = useState(parameter?.position ?? nextPosition);
   const [multiValue, setMultiValue] = useState(parameter?.multiValue ?? false);
+  const [hidden, setHidden] = useState(parameter?.hidden ?? false);
+  const [allowNull, setAllowNull] = useState(parameter?.allowNull ?? false);
+  const [fromParameterName, setFromParameterName] = useState(
+    parameter?.fromParameterName ?? '',
+  );
+  const [toParameterName, setToParameterName] = useState(
+    parameter?.toParameterName ?? '',
+  );
   const [parentParamId, setParentParamId] = useState<number | null>(
     parameter?.parentParamId ?? null,
   );
@@ -401,9 +442,17 @@ function ParameterFormModal({
       newErrors.staticValues =
         'At least one static value is required for static LOV';
     }
+    if (type === 'DATERANGE') {
+      if (!fromParameterName.trim()) {
+        newErrors.fromParameterName = 'From Parameter Name is required for DATERANGE';
+      }
+      if (!toParameterName.trim()) {
+        newErrors.toParameterName = 'To Parameter Name is required for DATERANGE';
+      }
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [name, label, type, lovType, lovQuery, staticValues]);
+  }, [name, label, type, lovType, lovQuery, staticValues, fromParameterName, toParameterName]);
 
   const createMutation = useMutation({
     mutationFn: (data: ParameterFormData) => createParameter(reportId, data),
@@ -449,6 +498,10 @@ function ParameterFormModal({
           : undefined,
       parentParamId: parentParamId || null,
       multiValue,
+      hidden,
+      allowNull,
+      fromParameterName: type === 'DATERANGE' ? fromParameterName.trim() : undefined,
+      toParameterName: type === 'DATERANGE' ? toParameterName.trim() : undefined,
     };
 
     if (isEdit) {
@@ -472,6 +525,10 @@ function ParameterFormModal({
       setLovQuery('');
       setStaticValues([]);
       setParentParamId(null);
+    }
+    if (type !== 'DATERANGE') {
+      setFromParameterName('');
+      setToParameterName('');
     }
   }, [type]);
 
@@ -562,8 +619,8 @@ function ParameterFormModal({
             </div>
           </div>
 
-          {/* Required & Multi-value */}
-          <div className="flex items-center gap-6">
+          {/* Required & Multi-value & Hidden & Allow Null */}
+          <div className="flex flex-wrap items-center gap-6">
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input
                 type="checkbox"
@@ -582,7 +639,70 @@ function ParameterFormModal({
               />
               Multi-value (allows multiple selections)
             </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={hidden}
+                onChange={(e) => setHidden(e.target.checked)}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              Hidden
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={allowNull}
+                onChange={(e) => setAllowNull(e.target.checked)}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              Allow Null
+            </label>
           </div>
+
+          {/* Date Range Configuration — only for DATERANGE type */}
+          {type === 'DATERANGE' && (
+            <fieldset className="space-y-3 rounded-lg border border-gray-200 p-4">
+              <legend className="px-2 text-sm font-medium text-gray-600">
+                Date Range Configuration
+              </legend>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">From Parameter Name *</label>
+                  <input
+                    className="input-field font-mono"
+                    value={fromParameterName}
+                    onChange={(e) => setFromParameterName(e.target.value)}
+                    placeholder="start_date"
+                  />
+                  {errors.fromParameterName && (
+                    <p className="mt-1 text-xs text-red-600">
+                      {errors.fromParameterName}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-gray-400">
+                    The parameter that receives the from-date value.
+                  </p>
+                </div>
+                <div>
+                  <label className="label">To Parameter Name *</label>
+                  <input
+                    className="input-field font-mono"
+                    value={toParameterName}
+                    onChange={(e) => setToParameterName(e.target.value)}
+                    placeholder="end_date"
+                  />
+                  {errors.toParameterName && (
+                    <p className="mt-1 text-xs text-red-600">
+                      {errors.toParameterName}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-gray-400">
+                    The parameter that receives the to-date value.
+                  </p>
+                </div>
+              </div>
+            </fieldset>
+          )}
 
           {/* LOV Configuration — only for DROPDOWN type */}
           {type === 'DROPDOWN' && (

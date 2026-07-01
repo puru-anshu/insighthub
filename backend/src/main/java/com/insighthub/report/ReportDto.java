@@ -20,6 +20,7 @@ public class ReportDto {
     private String contactPerson;
     private boolean active;
     private boolean hidden;
+    private boolean usePreparedStatements;
     private String defaultReportFormat;
     private String reportSource;
     private LocalDateTime createdAt;

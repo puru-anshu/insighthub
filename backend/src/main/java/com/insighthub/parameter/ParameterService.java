@@ -59,6 +59,10 @@ public class ParameterService {
             .lovStaticValues(serializeStaticValues(request.getLovStaticValues()))
             .multiValue(request.isMultiValue())
             .dateRangePair(request.getDateRangePair())
+            .hidden(request.isHidden())
+            .allowNull(request.isAllowNull())
+            .fromParameterName(request.getFromParameterName())
+            .toParameterName(request.getToParameterName())
             .build();
 
         // Set parent parameter reference if provided
@@ -88,6 +92,10 @@ public class ParameterService {
         entity.setLovStaticValues(serializeStaticValues(request.getLovStaticValues()));
         entity.setMultiValue(request.isMultiValue());
         entity.setDateRangePair(request.getDateRangePair());
+        entity.setHidden(request.isHidden());
+        entity.setAllowNull(request.isAllowNull());
+        entity.setFromParameterName(request.getFromParameterName());
+        entity.setToParameterName(request.getToParameterName());
 
         // Update parent parameter reference
         if (request.getParentParamId() != null) {
@@ -274,6 +282,10 @@ public class ParameterService {
             .parentParamId(entity.getParentParam() != null ? entity.getParentParam().getId() : null)
             .multiValue(entity.isMultiValue())
             .dateRangePair(entity.getDateRangePair())
+            .hidden(entity.isHidden())
+            .allowNull(entity.isAllowNull())
+            .fromParameterName(entity.getFromParameterName())
+            .toParameterName(entity.getToParameterName())
             .build();
     }
 
